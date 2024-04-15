@@ -97,7 +97,7 @@ or to the blog post from my colleague Sarah :
 
 ## open night light that is stored as a NetCDF
 
-nl_15 <- nc_open(here("data","raw","raster","night_light_15.nc"))
+nl_15 <- nc_open(here("data","raw","night_light_15.nc"))
 
 
 ## the first step is to print the "nc dump" that contains all the info on the file structure
@@ -113,7 +113,7 @@ day <- ncvar_get(nl_15, "Day_of_year")
 
 ## now we extract the values of the variable copying the name from the nc dump 
 
-light.array <- ncvar_get(nl_15, "HRAC_COM_FR")
+light.array <- ncvar_get(nl_15, "HRFC_COM_FR")
 
 ## now check the dimensions to see if we have 365 days, and then 720-360 for lon-lat
 
@@ -121,7 +121,7 @@ dim(light.array)
 
 ## now check for NAs and replace whatever placeholder was used in the data with plain NA
 
-fillvalue <- ncatt_get(nl_15, "HRAC_COM_FR", "_FillValue")
+fillvalue <- ncatt_get(nl_15, "HRFC_COM_FR", "_FillValue")
 
 light.array[light.array == fillvalue$value] <- NA
 
@@ -143,7 +143,7 @@ dim(light.slice)
 
 ## now is time to get a raster out of this 
 
-night <- raster(t(light.slice), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
+night <- raster(t(light.array), xmn=min(lon), xmx=max(lon), ymn=min(lat), ymx=max(lat), crs=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs+ towgs84=0,0,0"))
 
 
 
@@ -163,7 +163,7 @@ night<- projectRaster(night, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_
 
 ## open population data from SEDAC that is stored as a GeoTiff
 
-pop <- raster(here("data","raw","raster","sedac_pop_2000.TIFF"))
+pop <- raster(here("data","raw","sedac_pop_2000.TIFF"))
 
 
 ## check the crs 
@@ -187,6 +187,9 @@ world_map <- ne_countries(scale = "medium", returnclass = "sf")
 
 # MANIPULATING RASTER DATA
 
+#better dont make it smaller but the smaller the data the better (but you need to understand the data- if source make it with a model its not good)
+
+
 ## Cropping rasters
 
 A very common task if too need to crop your raster data to a specific area. So now we will crop both population and night lights to the extent of Italy.
@@ -198,6 +201,7 @@ A very common task if too need to crop your raster data to a specific area. So n
 ita_map <- world_map |>
   filter(sovereignt == "Italy")
 
+plot(ita_map)
 ## now we create a box around the germany map 
 
 ita_box <- st_bbox(ita_map)
@@ -287,7 +291,7 @@ plot(ita_pop_mask)
 
 So now we have night lights and population at the same resolution. The method we used is bilinear, so to put cells together or add new cells if we are creating a smaller resolution the algorithm behind the function will take the neighbouring cells and average between them.
 
-## Aggregating and Disaggregating rasters
+## Aggregating and Disaggregating rasters (But Resemple is safer)
 
 Another strategy that can be used to reduce the number of cells or get a value for an entire area is to aggregate the raster into bigger units.
 
@@ -339,7 +343,8 @@ Now we have the population and the night time lights at the same resolution, we 
 We can do this with the \*\* overlay \*\* function from the raster package.
 
 ```{r overlaying}
-
+ita_mask <- raster(ita_mask)
+resampled_ita_pop <- raster(resampled_ita_pop)
 
 pop_night <- overlay(ita_mask, resampled_ita_pop, fun=function(x,y) x/y)
 
@@ -376,13 +381,13 @@ values <- exact_extract(ita_mask, ita_2, 'sum')
 
 ## the function is returning a vector and we can assign it to a column in our shapefile so that later is easier to plot and in general you can do this with the dataset you will use for e.g. for regressions
 
-ita_2$mean_light <- values
+ita_2$sum_light <- values
 
 ## let´s look at the distribution of the lights first 
-hist(ita_2$mean_light)  ## looks legit we can plot it 
+hist(ita_2$sum_light)  ## looks legit we can plot it 
 
 ita_night_plot <- ggplot() +
-  geom_sf(data = ita_2, aes(fill = mean_light)) + 
+  geom_sf(data = ita_2, aes(fill = sum_light)) + 
   scale_fill_viridis_c() + 
   theme_minimal() +
   labs(title = "Mean Night Light Intensity by Italian NUTS 2")
@@ -468,6 +473,7 @@ sicily <- ita_3 |>
 
  messina_centers <- st_centroid(messina)
  
+ str(messina_centers)
  
  ggplot()+
   geom_sf(data=messina) +
